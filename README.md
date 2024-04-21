@@ -1,5 +1,5 @@
 # Dragon Quest XI S: Echoes of an Elusive Age Fix
-[![Patreon-Button](https://github.com/Lyall/FISTFix/assets/695941/19c468ac-52af-4790-b4eb-5187c06af949)](https://www.patreon.com/Wintermance) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9)<br />
+[![Patreon-Button](https://github.com/Lyall/DQXISFix/assets/695941/e620e516-0368-4681-bc1b-d58272284d67)](https://www.patreon.com/Wintermance) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9)<br />
 [![Github All Releases](https://img.shields.io/github/downloads/Lyall/DQXISFix/total.svg)](https://github.com/Lyall/DQXISFix/releases)
 
 This is a fix that adds custom resolutions, ultrawide support and more to Dragon Quest XI S: Echoes of an Elusive Age.<br />
@@ -29,7 +29,7 @@ This list will contain bugs which may or may not be fixed.
 
 ## Screenshots
 
-|  |
+| ![ezgif-2-555eaa3795](https://github.com/Lyall/DQXISFix/assets/695941/016ae6d9-e8e0-401d-9a93-5c74fd31436e) |
 |:--:|
 | Gameplay |
 
