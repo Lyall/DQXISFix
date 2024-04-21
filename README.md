@@ -8,6 +8,7 @@ This is a fix that adds custom resolutions, ultrawide support and more to Dragon
 - Custom resolution support.
 - Ultrawide/narrow aspect ratio support.
 - Correct FOV at any aspect ratio.
+- Option to increase gameplay FOV.
 
 ## Installation
 - Grab the latest release of DQXISFix from [here.](https://github.com/Lyall/DQXISFix/releases)
