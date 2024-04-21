@@ -8,10 +8,11 @@ This is a fix that adds custom resolutions, ultrawide support and more to Dragon
 - Custom resolution support.
 - Ultrawide/narrow aspect ratio support.
 - Correct FOV at any aspect ratio.
+- Option to increase gameplay FOV.
 
 ## Installation
 - Grab the latest release of DQXISFix from [here.](https://github.com/Lyall/DQXISFix/releases)
-- Extract the contents of the release zip in to the the game folder. (e.g. "**steamapps\common\DRAGON QUEST XI S**" for Steam).
+- Extract the contents of the release zip in to the the game folder. <br />(e.g. "**steamapps\common\DRAGON QUEST XI S**" for Steam).
 
 ### Steam Deck/Linux Additional Instructions
 🚩**You do not need to do this if you are using Windows!**
@@ -24,7 +25,7 @@ This is a fix that adds custom resolutions, ultrawide support and more to Dragon
 Please report any issues you see.
 This list will contain bugs which may or may not be fixed.
 
-- Fades to black are not spanned to fill the screen.
+- Some fades to black are not spanned to fill the screen.
 - 2D mode is locked to 16:9.
 
 ## Screenshots
