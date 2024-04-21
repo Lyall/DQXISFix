@@ -11,7 +11,7 @@ This is a fix that adds custom resolutions, ultrawide support and more to Dragon
 
 ## Installation
 - Grab the latest release of DQXISFix from [here.](https://github.com/Lyall/DQXISFix/releases)
-- Extract the contents of the release zip in to the the game's binary folder. (e.g. "**steamapps\common\DRAGON QUEST XI S**" for Steam).
+- Extract the contents of the release zip in to the the game folder. (e.g. "**steamapps\common\DRAGON QUEST XI S**" for Steam).
 
 ### Steam Deck/Linux Additional Instructions
 🚩**You do not need to do this if you are using Windows!**
