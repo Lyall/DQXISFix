@@ -24,7 +24,7 @@ This is a fix that adds custom resolutions, ultrawide support and more to Dragon
 Please report any issues you see.
 This list will contain bugs which may or may not be fixed.
 
-- Fades to black are not spanned to fill the screen.
+- Some fades to black are not spanned to fill the screen.
 - 2D mode is locked to 16:9.
 
 ## Screenshots
