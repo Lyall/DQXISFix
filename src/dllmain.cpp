@@ -149,7 +149,7 @@ void ResolutionFix()
         ApplyResolutionMidHook = safetyhook::create_mid(ApplyResolutionScanResult,
             [](SafetyHookContext& ctx)
             {
-                // Get r.FullscreenMode
+                // Get window mode
                 if (ctx.rbx + 0xA0)
                 {
                     iFullscreenMode = *reinterpret_cast<int*>(ctx.rbx + 0xA0);
