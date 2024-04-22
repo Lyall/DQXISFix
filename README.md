@@ -27,6 +27,7 @@ This list will contain bugs which may or may not be fixed.
 
 - Some fades to black are not spanned to fill the screen.
 - 2D mode is locked to 16:9.
+- Interaction markers/speech bubbles/damage numbers will disappear outside the centred 16:9 boundary.
 
 ## Screenshots
 
