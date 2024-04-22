@@ -3,6 +3,7 @@
 [![Github All Releases](https://img.shields.io/github/downloads/Lyall/DQXISFix/total.svg)](https://github.com/Lyall/DQXISFix/releases)
 
 This is a fix that adds custom resolutions, ultrawide support and more to Dragon Quest XI S: Echoes of an Elusive Age.<br />
+If you are interested in a technical breakdown of how I made this fix, [check it out on my Patreon.](https://www.patreon.com/posts/dragon-quest-xi-102796530?utm_medium=clipboard_copy&utm_source=copyLink&utm_campaign=postshare_creator&utm_content=join_link)
 
 ## Features
 - Custom resolution support.
