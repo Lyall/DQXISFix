@@ -11,6 +11,7 @@ If you are interested in a technical breakdown of how I made this fix, [check it
 - Ultrawide/narrow aspect ratio support.
 - Correct FOV at any aspect ratio.
 - Option to increase gameplay FOV.
+- Centred 16:9 HUD.
 
 ## Installation
 - Grab the latest release of DQXISFix from [here.](https://github.com/Lyall/DQXISFix/releases)
