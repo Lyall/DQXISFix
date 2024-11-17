@@ -12,7 +12,7 @@ HMODULE thisModule;
 inipp::Ini<char> ini;
 std::shared_ptr<spdlog::logger> logger;
 string sFixName = "DQXISFix";
-string sFixVer = "0.9.0";
+string sFixVer = "0.9.1";
 string sLogFile = "DQXISFix.log";
 string sConfigFile = "DQXISFix.ini";
 string sExeName;
@@ -153,6 +153,13 @@ void ResolutionFix()
                 if (ctx.rbx + 0xA0)
                 {
                     iFullscreenMode = *reinterpret_cast<int*>(ctx.rbx + 0xA0);
+                }
+
+                // Automatically use desktop resolution
+                if (iCustomResX == 0 || iCustomResY == 0)
+                {
+                    iCustomResX = DesktopDimensions.first;
+                    iCustomResY = DesktopDimensions.second;
                 }
 
                 if (bCustomResolution)
