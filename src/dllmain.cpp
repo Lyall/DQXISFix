@@ -1,465 +1,439 @@
 #include "stdafx.h"
 #include "helper.hpp"
-#include <inipp/inipp.h>
+
+#include "SDK/Engine_classes.hpp"
+#include "SDK/UMG_classes.hpp"
+#include "SDK/WBP_UMG_Root_Widget_modern_classes.hpp"
+#include "SDK/JackGame_classes.hpp"
+#include "SDK/WBP_UMG_Fade_Widget_000_classes.hpp"
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
+#include <inipp/inipp.h>
 #include <safetyhook.hpp>
 
-HMODULE baseModule = GetModuleHandle(NULL);
+#define spdlog_confparse(var) spdlog::info("Config Parse: {}: {}", #var, var)
+
+HMODULE exeModule = GetModuleHandle(NULL);
 HMODULE thisModule;
 
-// Logger and config setup
+// Fix details
+std::string sFixName = "DQXISFix";
+std::string sFixVersion = "0.9.2";
+std::filesystem::path sFixPath;
+
+// Ini
 inipp::Ini<char> ini;
+std::string sConfigFile = sFixName + ".ini";
+
+// Logger
 std::shared_ptr<spdlog::logger> logger;
-string sFixName = "DQXISFix";
-string sFixVer = "0.9.1";
-string sLogFile = "DQXISFix.log";
-string sConfigFile = "DQXISFix.ini";
-string sExeName;
-filesystem::path sExePath;
-filesystem::path sThisModulePath;
+std::string sLogFile = sFixName + ".log";
+std::filesystem::path sExePath;
+std::string sExeName;
+
+// Aspect ratio / FOV / HUD
 std::pair DesktopDimensions = { 0,0 };
-
-// Ini Variables
-bool bCustomResolution;
-int iCustomResX;
-int iCustomResY;
-bool bHUDFix;
-bool bAspectFix;
-bool bFOVFix;
-float fAdditionalFOV;
-
-// Aspect ratio + HUD stuff
-float fPi = (float)3.141592653;
-float fNativeAspect = (float)16 / 9;
-float fNativeWidth;
-float fNativeHeight;
+const float fPi = 3.1415926535f;
+const float fNativeAspect = 1.777777791f;
 float fAspectRatio;
 float fAspectMultiplier;
 float fHUDWidth;
-float fHUDHeight;
-float fDefaultHUDWidth = (float)1920;
-float fDefaultHUDHeight = (float)1080;
 float fHUDWidthOffset;
+float fHUDHeight;
 float fHUDHeightOffset;
 
+// Ini variables
+bool bCustomRes = true;
+int iCustomResX = 0;
+int iCustomResY = 0;
+bool bFixAspect = true;
+float fGameplayFOVMulti = 1.00f;
+bool bFixHUD = true;
+
 // Variables
-int iResX;
-int iResY;
+int iCurrentResX;
+int iCurrentResY;
+int iOldResX;
+int iOldResY;
 int iFullscreenMode;
+SDK::UWBP_UMG_Fade_Widget_000_C* FadeWidget = nullptr;
 
 void Logging()
 {
-    // Get this module path
-    WCHAR thisModulePath[_MAX_PATH] = { 0 };
-    GetModuleFileNameW(thisModule, thisModulePath, MAX_PATH);
-    sThisModulePath = thisModulePath;
-    sThisModulePath = sThisModulePath.remove_filename();
+    // Get path to DLL
+    WCHAR dllPath[_MAX_PATH] = { 0 };
+    GetModuleFileNameW(thisModule, dllPath, MAX_PATH);
+    sFixPath = dllPath;
+    sFixPath = sFixPath.remove_filename();
 
     // Get game name and exe path
     WCHAR exePath[_MAX_PATH] = { 0 };
-    GetModuleFileNameW(baseModule, exePath, MAX_PATH);
+    GetModuleFileNameW(exeModule, exePath, MAX_PATH);
     sExePath = exePath;
     sExeName = sExePath.filename().string();
     sExePath = sExePath.remove_filename();
 
-    // Calculate aspect ratio / use desktop res instead
-    DesktopDimensions = Util::GetPhysicalDesktopDimensions();
+    // Spdlog initialisation
+    try {
+        logger = spdlog::basic_logger_st(sFixName.c_str(), sExePath.string() + sLogFile, true);
+        spdlog::set_default_logger(logger);
+        spdlog::flush_on(spdlog::level::debug);
 
-    // spdlog initialisation
-    {
-        try
-        {
-            logger = spdlog::basic_logger_st(sFixName.c_str(), sThisModulePath.string() + sLogFile, true);
-            spdlog::set_default_logger(logger);
-
-            spdlog::flush_on(spdlog::level::debug);
-            spdlog::info("----------");
-            spdlog::info("{} v{} loaded.", sFixName.c_str(), sFixVer.c_str());
-            spdlog::info("----------");
-            spdlog::info("Path to logfile: {}", sThisModulePath.string() + sLogFile);
-            spdlog::info("----------");
-
-            // Log module details
-            spdlog::info("Module Name: {0:s}", sExeName.c_str());
-            spdlog::info("Module Path: {0:s}", sExePath.string());
-            spdlog::info("Module Address: 0x{0:x}", (uintptr_t)baseModule);
-            spdlog::info("Module Timestamp: {0:d}", Memory::ModuleTimestamp(baseModule));
-            spdlog::info("----------");
-        }
-        catch (const spdlog::spdlog_ex& ex)
-        {
-            AllocConsole();
-            FILE* dummy;
-            freopen_s(&dummy, "CONOUT$", "w", stdout);
-            std::cout << "Log initialisation failed: " << ex.what() << std::endl;
-        }
+        spdlog::info("----------");
+        spdlog::info("{:s} v{:s} loaded.", sFixName.c_str(), sFixVersion.c_str());
+        spdlog::info("----------");
+        spdlog::info("Log file: {}", sFixPath.string() + sLogFile);
+        spdlog::info("----------");
+        spdlog::info("Module Name: {0:s}", sExeName.c_str());
+        spdlog::info("Module Path: {0:s}", sExePath.string());
+        spdlog::info("Module Address: 0x{0:x}", (uintptr_t)exeModule);
+        spdlog::info("Module Timestamp: {0:d}", Memory::ModuleTimestamp(exeModule));
+        spdlog::info("----------");
     }
-}
-
-void ReadConfig()
-{
-    // Initialise config
-    std::ifstream iniFile(sThisModulePath.string() + sConfigFile);
-    if (!iniFile)
-    {
+    catch (const spdlog::spdlog_ex& ex) {
         AllocConsole();
         FILE* dummy;
         freopen_s(&dummy, "CONOUT$", "w", stdout);
-        std::cout << "" << sFixName.c_str() << " v" << sFixVer.c_str() << " loaded." << std::endl;
+        std::cout << "Log initialisation failed: " << ex.what() << std::endl;
+        FreeLibraryAndExitThread(thisModule, 1);
+    }  
+}
+
+void Configuration()
+{
+    // Inipp initialisation
+    std::ifstream iniFile(sFixPath.string() + sConfigFile);
+    if (!iniFile) {
+        AllocConsole();
+        FILE* dummy;
+        freopen_s(&dummy, "CONOUT$", "w", stdout);
+        std::cout << "" << sFixName.c_str() << " v" << sFixVersion.c_str() << " loaded." << std::endl;
         std::cout << "ERROR: Could not locate config file." << std::endl;
-        std::cout << "ERROR: Make sure " << sConfigFile.c_str() << " is located in " << sThisModulePath.string().c_str() << std::endl;
+        std::cout << "ERROR: Make sure " << sConfigFile.c_str() << " is located in " << sFixPath.string().c_str() << std::endl;
+        spdlog::shutdown();
+        FreeLibraryAndExitThread(thisModule, 1);
     }
-    else
-    {
-        spdlog::info("Path to config file: {}", sThisModulePath.string() + sConfigFile);
+    else {
+        spdlog::info("Config file: {}", sFixPath.string() + sConfigFile);
         ini.parse(iniFile);
     }
 
-    // Read ini file
-    inipp::get_value(ini.sections["Custom Resolution"], "Enabled", bCustomResolution);
+    // Parse config
+    ini.strip_trailing_comments();
+    spdlog::info("----------");
+
+    // Load settings from ini
+    inipp::get_value(ini.sections["Custom Resolution"], "Enabled", bCustomRes);
     inipp::get_value(ini.sections["Custom Resolution"], "Width", iCustomResX);
     inipp::get_value(ini.sections["Custom Resolution"], "Height", iCustomResY);
-    inipp::get_value(ini.sections["Fix HUD"], "Enabled", bHUDFix);
-    inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bAspectFix);
-    inipp::get_value(ini.sections["Fix FOV"], "Enabled", bFOVFix);
-    inipp::get_value(ini.sections["Fix FOV"], "AdditionalFOV", fAdditionalFOV);
+    inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bFixAspect);
+    inipp::get_value(ini.sections["Gameplay FOV"], "Multiplier", fGameplayFOVMulti);
+    inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
 
-    // Log config parse
-    spdlog::info("Config Parse: bCustomResolution: {}", bCustomResolution);
-    spdlog::info("Config Parse: iCustomResX: {}", iCustomResX);
-    spdlog::info("Config Parse: iCustomResY: {}", iCustomResY);
-    spdlog::info("Config Parse: bHUDFix: {}", bHUDFix);
-    spdlog::info("Config Parse: bAspectFix: {}", bAspectFix);
-    spdlog::info("Config Parse: bFOVFix: {}", bFOVFix);
-    spdlog::info("Config Parse: fAdditionalFOV: {}", fAdditionalFOV);
+    // Log ini parse
+    spdlog_confparse(bCustomRes);
+    spdlog_confparse(iCustomResX);
+    spdlog_confparse(iCustomResY);
+    spdlog_confparse(bFixAspect);
+    spdlog_confparse(fGameplayFOVMulti);
+    spdlog_confparse(bFixHUD);
+
     spdlog::info("----------");
 }
 
-
-void ResolutionFix()
+void CalculateAspectRatio(bool bLog)
 {
-    // Apply custom resolution / get current resolution
-    uint8_t* ApplyResolutionScanResult = Memory::PatternScan(baseModule, "44 ?? ?? ?? ?? 48 ?? ?? 44 ?? ?? ?? ?? 48 ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F ?? ?? ??");
-    if (ApplyResolutionScanResult)
-    {
-        spdlog::info("Current Resolution: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)ApplyResolutionScanResult - (uintptr_t)baseModule);
+    if (iCurrentResX <= 0 || iCurrentResY <= 0)
+        return;
 
-        static SafetyHookMid ApplyResolutionMidHook{};
-        ApplyResolutionMidHook = safetyhook::create_mid(ApplyResolutionScanResult,
-            [](SafetyHookContext& ctx)
-            {
+    if (iCurrentResX == 0 || iCurrentResY == 0) {
+        spdlog::error("Current Resolution: Resolution invalid, using desktop resolution instead.");
+        iCurrentResX = DesktopDimensions.first;
+        iCurrentResY = DesktopDimensions.second;
+    }
+
+    // Calculate aspect ratio
+    fAspectRatio = (float)iCurrentResX / (float)iCurrentResY;
+    fAspectMultiplier = fAspectRatio / fNativeAspect;
+
+    // HUD 
+    fHUDWidth = (float)iCurrentResY * fNativeAspect;
+    fHUDHeight = (float)iCurrentResY;
+    fHUDWidthOffset = (float)(iCurrentResX - fHUDWidth) / 2.00f;
+    fHUDHeightOffset = 0.00f;
+    if (fAspectRatio < fNativeAspect) {
+        fHUDWidth = (float)iCurrentResX;
+        fHUDHeight = (float)iCurrentResX / fNativeAspect;
+        fHUDWidthOffset = 0.00f;
+        fHUDHeightOffset = (float)(iCurrentResY - fHUDHeight) / 2.00f;
+    }
+
+    // Log details about current resolution
+    if (bLog) {
+        spdlog::info("----------");
+        spdlog::info("Current Resolution: Resolution: {:d}x{:d}", iCurrentResX, iCurrentResY);
+        spdlog::info("Current Resolution: fAspectRatio: {}", fAspectRatio);
+        spdlog::info("Current Resolution: fAspectMultiplier: {}", fAspectMultiplier);
+        spdlog::info("Current Resolution: fHUDWidth: {}", fHUDWidth);
+        spdlog::info("Current Resolution: fHUDHeight: {}", fHUDHeight);
+        spdlog::info("Current Resolution: fHUDWidthOffset: {}", fHUDWidthOffset);
+        spdlog::info("Current Resolution: fHUDHeightOffset: {}", fHUDHeightOffset);
+        spdlog::info("----------");
+    }
+}
+
+void CurrentResolution()
+{
+    // Grab desktop resolution/aspect just in case
+    DesktopDimensions = Util::GetPhysicalDesktopDimensions();
+    iCurrentResX = DesktopDimensions.first;
+    iCurrentResY = DesktopDimensions.second;
+    CalculateAspectRatio(true);
+
+    // Current Resolution
+    std::uint8_t* CurrentResolutionScanResult = Memory::PatternScan(exeModule, "44 ?? ?? ?? ?? 48 ?? ?? 44 ?? ?? ?? ?? 48 ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F ?? ?? ??");
+    if (CurrentResolutionScanResult) {
+        spdlog::info("Current Resolution: Address is {:s}+{:x}", sExeName.c_str(), CurrentResolutionScanResult - (std::uint8_t*)exeModule);
+        static SafetyHookMid CurrentResolutionMidHook{};
+        CurrentResolutionMidHook = safetyhook::create_mid(CurrentResolutionScanResult,
+            [](SafetyHookContext& ctx) {
                 // Get window mode
-                if (ctx.rbx + 0xA0)
-                {
+                if (ctx.rbx + 0xA0) {
                     iFullscreenMode = *reinterpret_cast<int*>(ctx.rbx + 0xA0);
                 }
 
-                // Automatically use desktop resolution
-                if (iCustomResX == 0 || iCustomResY == 0)
-                {
-                    iCustomResX = DesktopDimensions.first;
-                    iCustomResY = DesktopDimensions.second;
-                }
+                // Apply custom resolution
+                if (bCustomRes) {
+                    // Automatically use desktop resolution
+                    if (iCustomResX == 0 || iCustomResY == 0) {
+                        iCustomResX = DesktopDimensions.first;
+                        iCustomResY = DesktopDimensions.second;
+                    }
 
-                if (bCustomResolution)
-                {
                     ctx.r9 = iCustomResX;
                     ctx.r10 = iCustomResY;
                 }
 
-                // Set desktop resolution if using borderless mode, the game does not do this >:(
-                if (iFullscreenMode == 1)
-                {
+                // Set desktop resolution if using borderless mode
+                if (iFullscreenMode == 1) {
                     ctx.r9 = DesktopDimensions.first;
                     ctx.r10 = DesktopDimensions.second;
                 }
 
-                iResX = (int)ctx.r9;
-                iResY = (int)ctx.r10;
+                int iResX = (int)ctx.r9;
+                int iResY = (int)ctx.r10;
 
-                fAspectRatio = (float)iResX / iResY;
-                fAspectMultiplier = fAspectRatio / fNativeAspect;
-                fNativeWidth = (float)iResY * fNativeAspect;
-                fNativeHeight = (float)iResX / fNativeAspect;
-
-                // HUD variables
-                fHUDWidth = (float)iResY * fNativeAspect;
-                fHUDHeight = (float)iResY;
-                fHUDWidthOffset = (float)(iResX - fHUDWidth) / 2;
-                fHUDHeightOffset = 0;
-                if (fAspectRatio < fNativeAspect)
-                {
-                    fHUDWidth = (float)iResX;
-                    fHUDHeight = (float)iResX / fNativeAspect;
-                    fHUDWidthOffset = 0;
-                    fHUDHeightOffset = (float)(iResY - fHUDHeight) / 2;
+                if (iResX != iCurrentResX || iResY != iCurrentResY) {
+                    iCurrentResX = iResX;
+                    iCurrentResY = iResY;
+                    CalculateAspectRatio(true);
                 }
-
-                // Log aspect ratio stuff
-                spdlog::info("----------");
-                spdlog::info("Resolution: Resolution: {}x{}", iResX, iResY);
-                spdlog::info("Resolution: fAspectRatio: {}", fAspectRatio);
-                spdlog::info("Resolution: fAspectMultiplier: {}", fAspectMultiplier);
-                spdlog::info("Resolution: fNativeWidth: {}", fNativeWidth);
-                spdlog::info("Resolution: fNativeHeight: {}", fNativeHeight);
-                spdlog::info("Resolution: fHUDWidth: {}", fHUDWidth);
-                spdlog::info("Resolution: fHUDHeight: {}", fHUDHeight);
-                spdlog::info("Resolution: fHUDWidthOffset: {}", fHUDWidthOffset);
-                spdlog::info("Resolution: fHUDHeightOffset: {}", fHUDHeightOffset);
-                spdlog::info("----------");
             });
     }
-    else if (!ApplyResolutionScanResult)
-    {
+    else {
         spdlog::error("Current Resolution: Pattern scan failed.");
+    }    
+}
+
+void UpdateOffsets()
+{
+    // GObjects
+    std::uint8_t* GObjectsScanResult = Memory::PatternScan(exeModule, "74 ?? 44 0F ?? ?? ?? ?? ?? ?? 48 8D ?? ?? ?? ?? ?? 48 8D ?? ?? ?? ?? ?? E8 ?? ?? ?? ??");
+    if (GObjectsScanResult) {
+        spdlog::info("Offsets: GObjects: Address is {:s}+{:x}", sExeName.c_str(), GObjectsScanResult - (std::uint8_t*)exeModule);
+        std::uint8_t* GObjectsAddr = Memory::GetAbsolute(GObjectsScanResult + 0xD);
+        SDK::Offsets::GObjects = GObjectsAddr - (std::uint8_t*)exeModule;
+        spdlog::info("Offsets: GObjects: Offset: {:x}", SDK::Offsets::GObjects);
+    }
+    else {
+        spdlog::error("Offsets: GObjects: Pattern scan failed.");
+    }
+
+    // AppendString
+    std::uint8_t* AppendStringScanResult = Memory::PatternScan(exeModule, "48 89 ?? ?? ?? 56 48 83 ?? ?? 48 8B ?? 48 8B ?? E8 ?? ?? ?? ?? 48 8B ?? 8B ?? 99 81 ?? ?? ?? ?? ?? 03 ??");
+    if (AppendStringScanResult) {
+        spdlog::info("Offsets: AppendString: Address is {:s}+{:x}", sExeName.c_str(), AppendStringScanResult - (std::uint8_t*)exeModule);
+        SDK::Offsets::AppendString = AppendStringScanResult - (std::uint8_t*)exeModule;
+        spdlog::info("Offsets: AppendString: Offset: {:x}", (uintptr_t)SDK::Offsets::AppendString);
+    }
+    else {
+        spdlog::error("Offsets: AppendString: Pattern scan failed.");
+    }
+
+    // ProcessEvent
+    std::uint8_t* ProcessEventScanResult = Memory::PatternScan(exeModule, "40 ?? 56 57 41 ?? 41 ?? 41 ?? 41 ?? 48 81 ?? ?? ?? ?? ?? 48 8D ?? ?? ?? 48 89 ?? ?? ?? ?? ?? 48 8B ?? ?? ?? ?? ?? 48 33 ?? 48 89 ?? ?? ?? ?? ?? 8B ?? ?? 45 33 ??");
+    if (ProcessEventScanResult) {
+        spdlog::info("Offsets: ProcessEvent: Address is {:s}+{:x}", sExeName.c_str(), ProcessEventScanResult - (std::uint8_t*)exeModule);
+        SDK::Offsets::ProcessEvent = ProcessEventScanResult - (std::uint8_t*)exeModule;
+        spdlog::info("Offsets: ProcessEvent: Offset: {:x}", (uintptr_t)SDK::Offsets::ProcessEvent);
+    }
+    else {
+        spdlog::error("Offsets: ProcessEvent: Pattern scan failed.");
     }
 }
 
-void AspectFOVFix()
+void AspectRatioFOV()
 {
-    if (bFOVFix)
-    {
-        // Gameplay FOV
-        // Gameplay uses it's own camera component class called JackPlayerCameraComponent
-        uint8_t* GameplayFOVScanResult = Memory::PatternScan(baseModule, "F3 41 ?? ?? ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? 48 ?? ?? FF ?? ??");
-        if (GameplayFOVScanResult)
-        {
-            spdlog::info("Gameplay FOV: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GameplayFOVScanResult - (uintptr_t)baseModule);
-
-            static SafetyHookMid GameplayFOVMidHook{};
-            GameplayFOVMidHook = safetyhook::create_mid(GameplayFOVScanResult + 0x6,
-                [](SafetyHookContext& ctx)
-                {
+    if (bFixAspect) {
+        // Aspect Ratio / FOV
+        std::uint8_t* AspectRatioFOVScanResult = Memory::PatternScan(exeModule, "F3 0F ?? ?? ?? 8B ?? ?? ?? ?? ?? 89 ?? ?? 8B ?? ?? 33 ?? ?? ?? ?? ?? 83 ?? 01");
+        if (AspectRatioFOVScanResult) {
+            spdlog::info("Aspect Ratio/FOV: Address is {:s}+{:x}", sExeName.c_str(), AspectRatioFOVScanResult - (std::uint8_t*)exeModule);
+            static SafetyHookMid FOVMidHook{};
+            FOVMidHook = safetyhook::create_mid(AspectRatioFOVScanResult,
+                [](SafetyHookContext& ctx) {
+                    // Fix vert- cutscene FOV
                     if (fAspectRatio > fNativeAspect)
-                    {
-                        ctx.xmm1.f32[0] = atanf(tanf(ctx.xmm1.f32[0] * (fPi / 360)) / fNativeAspect * fAspectRatio) * (360 / fPi);
-                    }
-                    ctx.xmm1.f32[0] += fAdditionalFOV;
-                });
-        }
-        else if (!GameplayFOVScanResult)
-        {
-            spdlog::error("Gameplay FOV: Pattern scan failed.");
-        }
-
-        // Cutscene FOV
-        uint8_t* CutsceneFOVScanResult = Memory::PatternScan(baseModule, "74 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? EB ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? 8B ?? ?? ?? ?? ??");
-        if (CutsceneFOVScanResult)
-        {
-            spdlog::info("Cutscene FOV: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CutsceneFOVScanResult - (uintptr_t)baseModule);
-
-            static SafetyHookMid CutsceneFOVMidHook{};
-            CutsceneFOVMidHook = safetyhook::create_mid(CutsceneFOVScanResult + 0x1C,
-                [](SafetyHookContext& ctx)
-                {
-                    if (fAspectRatio > fNativeAspect)
-                    {
                         ctx.xmm0.f32[0] = atanf(tanf(ctx.xmm0.f32[0] * (fPi / 360)) / fNativeAspect * fAspectRatio) * (360 / fPi);
-                    }
+                });
+
+            static SafetyHookMid AspectRatioMidHook{};
+            AspectRatioMidHook = safetyhook::create_mid(AspectRatioFOVScanResult + 0xB,
+                [](SafetyHookContext& ctx) {
+                    ctx.rax = *(uint32_t*)(&fAspectRatio);
                 });
         }
-        else if (!CutsceneFOVScanResult)
-        {
-            spdlog::error("Cutscene FOV: Pattern scan failed.");
+        else {
+            spdlog::error("Aspect Ratio/FOV: Pattern scan failed.");
         }
-    }
 
-    if (bAspectFix)
-    {
-        // Aspect Ratio
-        uint8_t* GameplayAspectRatioScanResult = Memory::PatternScan(baseModule, "89 ?? ?? 8B ?? ?? ?? ?? 00 33 ?? ?? 83 ?? 01 31 ?? ?? 0F ?? ?? ?? ?? ?? 00");
-        uint8_t* CutsceneAspectRatioScanResult = Memory::PatternScan(baseModule, "89 ?? ?? 8B ?? ?? 33 ?? ?? ?? ?? 00 83 ?? 01 31 ?? ?? 8B ?? ??");
-        if (GameplayAspectRatioScanResult && CutsceneAspectRatioScanResult)
-        {
-            spdlog::info("Gameplay Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GameplayAspectRatioScanResult - (uintptr_t)baseModule);
+        // Gameplay Aspect Ratio
+        std::uint8_t* GameplayAspectRatioScanResult = Memory::PatternScan(exeModule, "89 ?? ?? 8B ?? ?? ?? ?? 00 33 ?? ?? 83 ?? 01 31 ?? ?? 0F ?? ?? ?? ?? ?? 00");
+        if (GameplayAspectRatioScanResult) {
+            spdlog::info("Gameplay Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), GameplayAspectRatioScanResult - (std::uint8_t*)exeModule);
             static SafetyHookMid GameplayAspectRatioMidHook{};
             GameplayAspectRatioMidHook = safetyhook::create_mid(GameplayAspectRatioScanResult,
-                [](SafetyHookContext& ctx)
-                {
-                    ctx.rax = *(uint32_t*)&fAspectRatio;
+                [](SafetyHookContext& ctx) {
+                    ctx.rax = *(uint32_t*)(&fAspectRatio);
                 });
-
-            spdlog::info("Cutscene Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CutsceneAspectRatioScanResult - (uintptr_t)baseModule);
-            static SafetyHookMid CutsceneAspectRatioMidHook{};
-            CutsceneAspectRatioMidHook = safetyhook::create_mid(CutsceneAspectRatioScanResult,
-                [](SafetyHookContext& ctx)
-                {
-                    ctx.rax = *(uint32_t*)&fAspectRatio;
-                });            
         }
-        else if (!GameplayAspectRatioScanResult || !CutsceneAspectRatioScanResult)
-        {
-            spdlog::error("Aspect Ratio: Pattern scan failed.");
+        else {
+            spdlog::error("Gameplay Aspect Ratio: Pattern scan failed.");
         }
 
-        // Damage Numbers
-        // APlayerController::execProjectWorldLocationToScreen
-        uint8_t* DamageNumbersScanResult = Memory::PatternScan(baseModule, "48 ?? ?? ?? 0F ?? ?? 66 0F ?? ?? 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? ??");
-        if (DamageNumbersScanResult)
-        {
-            spdlog::info("Damage Numbers: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)DamageNumbersScanResult - (uintptr_t)baseModule);
-
+        // Damage Numbers - APlayerController::execProjectWorldLocationToScreen()
+        std::uint8_t* DamageNumbersScanResult = Memory::PatternScan(exeModule, "48 ?? ?? ?? 0F ?? ?? 66 0F ?? ?? 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? ??");
+        if (DamageNumbersScanResult) {
+            spdlog::info("Damage Numbers: Address is {:s}+{:x}", sExeName.c_str(), DamageNumbersScanResult - (std::uint8_t*)exeModule);
             static SafetyHookMid DamageNumbersMidHook{};
             DamageNumbersMidHook = safetyhook::create_mid(DamageNumbersScanResult + 0xE,
-                [](SafetyHookContext& ctx)
-                {
-                    if (fAspectRatio > fNativeAspect)
-                    {
+                [](SafetyHookContext& ctx) {
+                    if (fAspectRatio > fNativeAspect) {
                         ctx.xmm1.f32[0] = fHUDWidthOffset;
                     }
-                    else if (fAspectRatio < fNativeAspect)
-                    {
+                    else if (fAspectRatio < fNativeAspect) {
                         ctx.xmm0.f32[0] = fHUDHeightOffset;
                     }
                 });
         }
-        else if (!DamageNumbersScanResult)
-        {
+        else {
             spdlog::error("Damage Numbers: Pattern scan failed.");
         }
+    }  
 
-        /*
-        // 2D mode
-        uint8_t* Canvas2DModeScanResult = Memory::PatternScan(baseModule, "41 ?? 00 05 00 00 48 ?? ?? 48 ?? ?? E8 ?? ?? ?? ??") + 0x6;
-        uint8_t* World2DModeScanResult = Memory::PatternScan(baseModule, "B9 00 05 00 00 0F ?? ?? ?? ?? ?? ?? 0F ?? ??") + 0x5;
-        uint8_t* Cam2DAspectRatioScanResult = Memory::PatternScan(baseModule, "89 ?? ?? 8B ?? ?? ?? ?? ?? 8B ?? ?? 83 ?? 02 83 ?? 04");
-        if (Canvas2DModeScanResult && World2DModeScanResult && Cam2DAspectRatioScanResult)
-        {
-            spdlog::info("2D Mode: Canvas: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)Canvas2DModeScanResult - (uintptr_t)baseModule);
-            spdlog::info("2D Mode: World Size: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)World2DModeScanResult - (uintptr_t)baseModule);
-            spdlog::info("2D Mode: Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)Cam2DAspectRatioScanResult - (uintptr_t)baseModule);
+    // Gameplay FOV - Gameplay uses it's own camera component class called JackPlayerCameraComponent
+    uint8_t* GameplayFOVScanResult = Memory::PatternScan(exeModule, "F3 41 ?? ?? ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? 48 ?? ?? FF ?? ??");
+    if (GameplayFOVScanResult) {
+        spdlog::info("Gameplay FOV: Address is {:s}+{:x}", sExeName.c_str(), GameplayFOVScanResult - (std::uint8_t*)exeModule);
+        static SafetyHookMid GameplayFOVMidHook{};
+        GameplayFOVMidHook = safetyhook::create_mid(GameplayFOVScanResult + 0x6,
+            [](SafetyHookContext& ctx) {
+                // Fix vert- gameplay FOV
+                if (bFixAspect && fAspectRatio > fNativeAspect)
+                    ctx.xmm1.f32[0] = atanf(tanf(ctx.xmm1.f32[0] * (fPi / 360)) / fNativeAspect * fAspectRatio) * (360 / fPi);
 
-            // Canvas Render Target 2D
-            static SafetyHookMid Canvas2DModeMidHook{};
-            Canvas2DModeMidHook = safetyhook::create_mid(Canvas2DModeScanResult,
-                [](SafetyHookContext& ctx)
-                {
-                    if (fAspectRatio > fNativeAspect)
-                    {
-                        ctx.r8 = (int)720 * fAspectRatio;
-                        ctx.r9 = (int)720;
-                    }
-                    else if (fAspectRatio < fNativeAspect)
-                    {
-                        ctx.r8 = (int)1280;
-                        ctx.r9 = (int)1280 / fAspectRatio;
-                    }
-                });
-
-            // World size
-            static SafetyHookMid World2DModeMidHook{};
-            World2DModeMidHook = safetyhook::create_mid(World2DModeScanResult,
-                [](SafetyHookContext& ctx)
-                {
-                    if (fAspectRatio > fNativeAspect)
-                    {
-                        ctx.rcx = (int)720 * fAspectRatio;
-                        ctx.rdx = (int)720;
-                    }
-                    else if (fAspectRatio < fNativeAspect)
-                    {
-                        ctx.rcx = (int)1280;
-                        ctx.rdx = (int)1280 / fAspectRatio;
-                    }
-                });
-
-            // Aspect ratio
-            static SafetyHookMid Cam2DAspectRatioMidHook{};
-            Cam2DAspectRatioMidHook = safetyhook::create_mid(Cam2DAspectRatioScanResult + 0x21,
-                [](SafetyHookContext& ctx)
-                {
-                    ctx.rcx = 0;
-                });
-        }
-        else if (!Canvas2DModeScanResult || !World2DModeScanResult)
-        {
-            spdlog::error("2D Mode: Pattern scan failed.");
-        }
-        */
+                // Multiply gameplay FOV
+                if (fGameplayFOVMulti != 1.00f)
+                    ctx.xmm1.f32[0] *= fGameplayFOVMulti;
+            });
+    }
+    else {
+        spdlog::error("Gameplay FOV: Pattern scan failed.");
     }
 }
 
-void HUDFix()
+void HUD()
 {
-    // Set loading screen background texture to screen size.
-    uint8_t* LoadingScreenScanResult = Memory::PatternScan(baseModule, "F3 41 ?? ?? ?? ?? ?? ?? 00 F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? 3D 55 05 00 00 75 ??");
-    if (LoadingScreenScanResult)
-    {
-        spdlog::info("Loading Screen: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)LoadingScreenScanResult - (uintptr_t)baseModule);
+    if (bFixHUD) {
+        // HUD
+        std::uint8_t* HUDSizeScanResult = Memory::PatternScan(exeModule, "48 8D ?? ?? ?? ?? ?? 44 89 ?? ?? 48 89 ?? ?? BE 03 00 00 00 48 8D ?? ?? ?? ?? ??");
+        if (HUDSizeScanResult) {
+            spdlog::info("HUD: Size: Address is {:s}+{:x}", sExeName.c_str(), HUDSizeScanResult - (std::uint8_t*)exeModule);
+            std::uint8_t* HUDSizeFunction = Memory::GetAbsolute(HUDSizeScanResult + 0x3);
+            spdlog::info("HUD: Size: Function address is {:s}+{:x}", sExeName.c_str(), HUDSizeFunction - (std::uint8_t*)exeModule);
+            if (HUDSizeFunction) {
+                static SafetyHookMid HUDSizeMidHook{};
+                HUDSizeMidHook = safetyhook::create_mid(HUDSizeFunction + 0x7,
+                    [](SafetyHookContext& ctx) {
+                        if (ctx.xmm0.f32[0] == 0.00f && ctx.xmm0.f32[1] == 0.00f && ctx.xmm0.f32[2] == 1.00f && ctx.xmm0.f32[3] == 1.00f) {
+                            SDK::UObject* obj = (SDK::UObject*)ctx.rcx; 
+                            // Don't center these markers
+                            if (obj->GetName().contains("WBP_3DWidgetRootPanelWidget_C"))
+                                return;
 
-        static SafetyHookMid LoadingScreenMidHook{};
-        LoadingScreenMidHook = safetyhook::create_mid(LoadingScreenScanResult + 0x9,
-            [](SafetyHookContext& ctx)
-            {
-                ctx.xmm1.f32[0] = (float)iCustomResX;
-                ctx.xmm2.f32[0] = (float)iCustomResY;
-            });
-    }
-    else if (!LoadingScreenScanResult)
-    {
-        spdlog::error("Loading Screen: Pattern scan failed.");
-    }
+                            if (fAspectRatio > fNativeAspect) {
+                                ctx.xmm0.f32[0] = fHUDWidthOffset / (float)iCurrentResX;
+                                ctx.xmm0.f32[2] = 1.00f - ctx.xmm0.f32[0];
+                            }
+                            else if (fAspectRatio < fNativeAspect) {
+                                ctx.xmm0.f32[1] = fHUDHeightOffset / (float)iCurrentResY;
+                                ctx.xmm0.f32[3] = 1.00f - ctx.xmm0.f32[1];
+                            }
+                        }
+                    });
+            }
+        }
+        else {
+            spdlog::error("HUD: Size: Pattern scan failed.");
+        }
+        // JackGameplayStatics::SetCameraFade()
+        std::uint8_t* CameraFadeScanResult = Memory::PatternScan(exeModule, "0F 10 ?? ?? 44 0F ?? ?? ?? 48 85 ?? 0F ?? ?? ?? F3 0F ?? ?? ?? 40 0F ?? ??");
+        if (CameraFadeScanResult) {
+            spdlog::info("Camera Fade: Address is {:s}+{:x}", sExeName.c_str(), CameraFadeScanResult - (std::uint8_t*)exeModule);
+            static SafetyHookMid CameraFadeMidHook{};
+            CameraFadeMidHook = safetyhook::create_mid(CameraFadeScanResult,
+                [](SafetyHookContext& ctx) {
+                    // Cache fade widget since this is an expensive process
+                    if (!FadeWidget) {
+                        for (int i = 0; i < SDK::UObject::GObjects->Num(); i++)
+                        {
+                            SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
 
-    if (bHUDFix)
-    {
-        // HUD size
-        uint8_t* HUDSizeScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? F3 0F ?? ?? ?? ?? F3 0F ?? ?? ?? ?? F3 0F ?? ?? ?? ?? 74 ?? 41 ?? ?? ?? ?? ?? 00 FF ?? 48 ??");
-        if (HUDSizeScanResult)
-        {
-            spdlog::info("HUD Size: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)HUDSizeScanResult - (uintptr_t)baseModule);
+                            if (!Obj)
+                                continue;
 
-            static SafetyHookMid HUDSizeMidHook{};
-            HUDSizeMidHook = safetyhook::create_mid(HUDSizeScanResult,
-                [](SafetyHookContext& ctx)
-                {
-                    if (fAspectRatio > fNativeAspect)
-                    {
-                        ctx.xmm2.f32[0] = (ctx.xmm1.f32[0] - (float)1920) / 2;
-                        ctx.xmm1.f32[0] = (float)1920;
+                            if (Obj->IsDefaultObject())
+                                continue;
+
+                            if (Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass()))
+                                FadeWidget = (SDK::UWBP_UMG_Fade_Widget_000_C*)Obj;
+                        }
                     }
-                    else if (fAspectRatio < fNativeAspect)
-                    {
-                        ctx.xmm3.f32[0] = (ctx.xmm0.f32[0] - (float)1080) / 2;
-                        ctx.xmm0.f32[0] = (float)1080;
+
+                    // Span fade
+                    if (FadeWidget) {
+                        spdlog::info("fadewidget = {}", FadeWidget->GetFullName());
                     }
                 });
         }
-        else if (!HUDSizeScanResult)
-        {
-            spdlog::error("HUD Size: Pattern scan failed.");
+        else {
+            spdlog::error("Camera Fade: Pattern scan failed.");
         }
 
-        // Interaction markers
-        // UGameplayStatics::execProjectWorldToScreenWithDeviceZ
-        uint8_t* InteractionMarkersScanResult = Memory::PatternScan(baseModule, "66 0F ?? ?? ?? ?? ?? ?? 00 0F ?? ?? F3 0F ?? ?? 66 0F ?? ?? ?? ?? ?? ?? 00 0F ?? ??");
-        if (InteractionMarkersScanResult)
-        {
-            spdlog::info("Interaction Markers: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)InteractionMarkersScanResult - (uintptr_t)baseModule);
-
-            static SafetyHookMid InteractionMarkersWidthOffsetMidHook{};
-            InteractionMarkersWidthOffsetMidHook = safetyhook::create_mid(InteractionMarkersScanResult + 0xC,
-                [](SafetyHookContext& ctx)
-                {
-                    if (fAspectRatio > fNativeAspect)
-                    {
-                        ctx.xmm0.f32[0] = (float)fHUDWidthOffset;
-                    }
-                });
-
-            static SafetyHookMid InteractionMarkersHeightOffsetMidHook{};
-            InteractionMarkersHeightOffsetMidHook = safetyhook::create_mid(InteractionMarkersScanResult + 0x1C,
-                [](SafetyHookContext& ctx)
-                {
-                    if (fAspectRatio < fNativeAspect)
-                    {
-                        ctx.xmm0.f32[0] = (float)fHUDHeightOffset;
-                    }
+        // Loading screen background
+        std::uint8_t* LoadingScreenScanResult = Memory::PatternScan(exeModule, "F3 41 ?? ?? ?? ?? ?? ?? 00 F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? 3D 55 05 00 00 75 ??");
+        if (LoadingScreenScanResult) {
+            spdlog::info("Loading Screen: Address is {:s}+{:x}", sExeName.c_str(), LoadingScreenScanResult - (std::uint8_t*)exeModule);
+            static SafetyHookMid LoadingScreenMidHook{};
+            LoadingScreenMidHook = safetyhook::create_mid(LoadingScreenScanResult + 0x9,
+                [](SafetyHookContext& ctx) {
+                    ctx.xmm1.f32[0] = (float)iCurrentResX;
+                    ctx.xmm2.f32[0] = (float)iCurrentResY;
                 });
         }
-        else if (!InteractionMarkersScanResult)
-        {
-            spdlog::error("Interaction Markers: Pattern scan failed.");
+        else {
+            spdlog::error("Loading Screen: Pattern scan failed.");
         }
     }
 }
@@ -467,29 +441,25 @@ void HUDFix()
 DWORD __stdcall Main(void*)
 {
     Logging();
-    ReadConfig();
-    ResolutionFix();
-    AspectFOVFix();
-    HUDFix();
+    Configuration();
+    UpdateOffsets();
+    CurrentResolution();
+    AspectRatioFOV();
+    HUD();
     return true;
 }
 
-BOOL APIENTRY DllMain( HMODULE hModule,
-                       DWORD  ul_reason_for_call,
-                       LPVOID lpReserved
-                     )
+BOOL APIENTRY DllMain(HMODULE hModule, DWORD  ul_reason_for_call, LPVOID lpReserved)
 {
-    switch (ul_reason_for_call)
-    {
-    case DLL_PROCESS_ATTACH:
-    {
+    switch (ul_reason_for_call) {
+    case DLL_PROCESS_ATTACH: {
         thisModule = hModule;
         HANDLE mainHandle = CreateThread(NULL, 0, Main, 0, NULL, 0);
-        if (mainHandle)
-        {
-            SetThreadPriority(mainHandle, THREAD_PRIORITY_HIGHEST); // set our Main thread priority higher than the games thread
+        if (mainHandle) {
+            SetThreadPriority(mainHandle, THREAD_PRIORITY_HIGHEST);
             CloseHandle(mainHandle);
         }
+        break;
     }
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
@@ -498,4 +468,3 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     }
     return TRUE;
 }
-
