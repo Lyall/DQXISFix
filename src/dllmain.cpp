@@ -369,7 +369,7 @@ void HUD()
                         if (ctx.xmm0.f32[0] == 0.00f && ctx.xmm0.f32[1] == 0.00f && ctx.xmm0.f32[2] == 1.00f && ctx.xmm0.f32[3] == 1.00f) {
                             SDK::UObject* obj = (SDK::UObject*)ctx.rcx; 
                             // Don't center these markers
-                            if (obj->GetName().contains("WBP_3DWidgetRootPanelWidget_C"))
+                            if (obj->GetName().contains("WBP_3DWidgetRootPanelWidget_C") || obj->GetName().contains("WBP_UMG_Root_Widget_modern_C"))
                                 return;
 
                             if (fAspectRatio > fNativeAspect) {
@@ -387,6 +387,7 @@ void HUD()
         else {
             spdlog::error("HUD: Size: Pattern scan failed.");
         }
+
         // JackGameplayStatics::SetCameraFade()
         std::uint8_t* CameraFadeScanResult = Memory::PatternScan(exeModule, "0F 10 ?? ?? 44 0F ?? ?? ?? 48 85 ?? 0F ?? ?? ?? F3 0F ?? ?? ?? 40 0F ?? ??");
         if (CameraFadeScanResult) {
@@ -394,20 +395,31 @@ void HUD()
             static SafetyHookMid CameraFadeMidHook{};
             CameraFadeMidHook = safetyhook::create_mid(CameraFadeScanResult,
                 [](SafetyHookContext& ctx) {
-                    // Cache fade widget since this is expensive
-                    if (!FadeWidget) {
-                        for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
-                            SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+                    for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+                        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
 
-                            if (!Obj)
-                                continue;
+                        if (!Obj)
+                            continue;
 
-                            if (Obj->IsDefaultObject())
-                                continue;
+                        if (Obj->IsDefaultObject())
+                            continue;
 
-                            if (Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass())) {
-                                FadeWidget = (SDK::UWBP_UMG_Fade_Widget_000_C*)Obj;
-                                spdlog::info("FadeWidget = {}", Obj->GetFullName());
+                        if (Obj->IsA(SDK::UWBP_UMG_Root_Widget_modern_C::StaticClass())) {
+                            auto hud = (SDK::UWBP_UMG_Root_Widget_modern_C*)Obj;
+                            auto panel = (SDK::UCanvasPanel*)hud->RootPanel;
+                            panel->SetClipping(SDK::EWidgetClipping::Inherit);
+                        }
+
+                        if (Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass())) {
+                            FadeWidget = (SDK::UWBP_UMG_Fade_Widget_000_C*)Obj;
+                            FadeWidget->CanvasPanel->SetClipping(SDK::EWidgetClipping::Inherit);
+                            auto fadeslot = (SDK::UCanvasPanelSlot*)FadeWidget->Fade->Slot;
+
+                            if (fAspectRatio > fNativeAspect) {
+                                FadeWidget->SetRenderScale(SDK::FVector2D(fAspectMultiplier, 1.00f));
+                            }
+                            else if (fAspectRatio < fNativeAspect) {
+                                FadeWidget->SetRenderScale(SDK::FVector2D(1.00f, 1.00f / fAspectMultiplier));
                             }
                         }
                     }
