@@ -4,7 +4,6 @@
 #include "SDK/Engine_classes.hpp"
 #include "SDK/UMG_classes.hpp"
 #include "SDK/WBP_UMG_Root_Widget_modern_classes.hpp"
-#include "SDK/JackGame_classes.hpp"
 #include "SDK/WBP_UMG_Fade_Widget_000_classes.hpp"
 
 #include <spdlog/spdlog.h>
@@ -58,6 +57,7 @@ int iOldResX;
 int iOldResY;
 int iFullscreenMode;
 SDK::UWBP_UMG_Fade_Widget_000_C* FadeWidget = nullptr;
+SDK::UWBP_UMG_Root_Widget_modern_C* ModernHUD = nullptr;
 
 void Logging()
 {
@@ -395,32 +395,41 @@ void HUD()
             static SafetyHookMid CameraFadeMidHook{};
             CameraFadeMidHook = safetyhook::create_mid(CameraFadeScanResult,
                 [](SafetyHookContext& ctx) {
-                    for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
-                        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+                    // This is performance intensive so lets cache ModernHUD and FadeWidget
+                    if (!ModernHUD || !FadeWidget) {
+                        for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+                            SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
 
-                        if (!Obj)
-                            continue;
+                            if (!Obj || Obj->IsDefaultObject())
+                                continue;
 
-                        if (Obj->IsDefaultObject())
-                            continue;
+                            if (!ModernHUD && Obj->IsA(SDK::UWBP_UMG_Root_Widget_modern_C::StaticClass()))
+                                ModernHUD = (SDK::UWBP_UMG_Root_Widget_modern_C*)Obj;
 
-                        if (Obj->IsA(SDK::UWBP_UMG_Root_Widget_modern_C::StaticClass())) {
-                            auto hud = (SDK::UWBP_UMG_Root_Widget_modern_C*)Obj;
-                            auto panel = (SDK::UCanvasPanel*)hud->RootPanel;
-                            panel->SetClipping(SDK::EWidgetClipping::Inherit);
+                            if (!FadeWidget && Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass()))
+                                FadeWidget = (SDK::UWBP_UMG_Fade_Widget_000_C*)Obj;
+
+                            if (ModernHUD && FadeWidget)
+                                break;
                         }
+                    }
 
-                        if (Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass())) {
-                            FadeWidget = (SDK::UWBP_UMG_Fade_Widget_000_C*)Obj;
-                            FadeWidget->CanvasPanel->SetClipping(SDK::EWidgetClipping::Inherit);
-                            auto fadeslot = (SDK::UCanvasPanelSlot*)FadeWidget->Fade->Slot;
+                    // Check if ModernHUD's clipping has been set
+                    if (ModernHUD && ModernHUD->Clipping != SDK::EWidgetClipping::Inherit) {
+                        auto panel = (SDK::UCanvasPanel*)ModernHUD->RootPanel;
+                        panel->SetClipping(SDK::EWidgetClipping::Inherit);
+                    }
 
-                            if (fAspectRatio > fNativeAspect) {
-                                FadeWidget->SetRenderScale(SDK::FVector2D(fAspectMultiplier, 1.00f));
-                            }
-                            else if (fAspectRatio < fNativeAspect) {
-                                FadeWidget->SetRenderScale(SDK::FVector2D(1.00f, 1.00f / fAspectMultiplier));
-                            }
+                    // Set FadeWidget scale
+                    if (FadeWidget) {
+                        FadeWidget->CanvasPanel->SetClipping(SDK::EWidgetClipping::Inherit);
+                        auto fadeslot = (SDK::UCanvasPanelSlot*)FadeWidget->Fade->Slot;
+
+                        if (fAspectRatio > fNativeAspect) {
+                            FadeWidget->SetRenderScale(SDK::FVector2D(fAspectMultiplier, 1.00f));
+                        }
+                        else if (fAspectRatio < fNativeAspect) {
+                            FadeWidget->SetRenderScale(SDK::FVector2D(1.00f, 1.00f / fAspectMultiplier));
                         }
                     }
                 });
