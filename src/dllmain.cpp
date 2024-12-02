@@ -243,7 +243,7 @@ void UpdateOffsets()
     if (GObjectsScanResult) {
         spdlog::info("Offsets: GObjects: Address is {:s}+{:x}", sExeName.c_str(), GObjectsScanResult - (std::uint8_t*)exeModule);
         std::uint8_t* GObjectsAddr = Memory::GetAbsolute(GObjectsScanResult + 0xD);
-        SDK::Offsets::GObjects = GObjectsAddr - (std::uint8_t*)exeModule;
+        SDK::Offsets::GObjects = GObjectsAddr - (std::uint8_t*)exeModule + 0x10;
         spdlog::info("Offsets: GObjects: Offset: {:x}", SDK::Offsets::GObjects);
     }
     else {
@@ -394,10 +394,9 @@ void HUD()
             static SafetyHookMid CameraFadeMidHook{};
             CameraFadeMidHook = safetyhook::create_mid(CameraFadeScanResult,
                 [](SafetyHookContext& ctx) {
-                    // Cache fade widget since this is an expensive process
+                    // Cache fade widget since this is expensive
                     if (!FadeWidget) {
-                        for (int i = 0; i < SDK::UObject::GObjects->Num(); i++)
-                        {
+                        for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
                             SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
 
                             if (!Obj)
@@ -406,14 +405,11 @@ void HUD()
                             if (Obj->IsDefaultObject())
                                 continue;
 
-                            if (Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass()))
+                            if (Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass())) {
                                 FadeWidget = (SDK::UWBP_UMG_Fade_Widget_000_C*)Obj;
+                                spdlog::info("FadeWidget = {}", Obj->GetFullName());
+                            }
                         }
-                    }
-
-                    // Span fade
-                    if (FadeWidget) {
-                        spdlog::info("fadewidget = {}", FadeWidget->GetFullName());
                     }
                 });
         }
