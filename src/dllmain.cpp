@@ -127,16 +127,17 @@ void Configuration()
     inipp::get_value(ini.sections["Custom Resolution"], "Enabled", bCustomRes);
     inipp::get_value(ini.sections["Custom Resolution"], "Width", iCustomResX);
     inipp::get_value(ini.sections["Custom Resolution"], "Height", iCustomResY);
-    inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bFixAspect);
     inipp::get_value(ini.sections["Gameplay FOV"], "Multiplier", fGameplayFOVMulti);
+    fGameplayFOVMulti = std::clamp(fGameplayFOVMulti, 0.10f, 2.00f);
+    inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bFixAspect);
     inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
 
     // Log ini parse
     spdlog_confparse(bCustomRes);
     spdlog_confparse(iCustomResX);
     spdlog_confparse(iCustomResY);
-    spdlog_confparse(bFixAspect);
     spdlog_confparse(fGameplayFOVMulti);
+    spdlog_confparse(bFixAspect);
     spdlog_confparse(bFixHUD);
 
     spdlog::info("----------");
@@ -192,11 +193,11 @@ void CurrentResolution()
     CalculateAspectRatio(true);
 
     // Current Resolution
-    std::uint8_t* CurrentResolutionScanResult = Memory::PatternScan(exeModule, "44 ?? ?? ?? ?? 48 ?? ?? 44 ?? ?? ?? ?? 48 ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F ?? ?? ??");
-    if (CurrentResolutionScanResult) {
-        spdlog::info("Current Resolution: Address is {:s}+{:x}", sExeName.c_str(), CurrentResolutionScanResult - (std::uint8_t*)exeModule);
-        static SafetyHookMid CurrentResolutionMidHook{};
-        CurrentResolutionMidHook = safetyhook::create_mid(CurrentResolutionScanResult,
+    std::uint8_t* ApplyResolutionScanResult = Memory::PatternScan(exeModule, "44 ?? ?? ?? ?? 48 ?? ?? 44 ?? ?? ?? ?? 48 ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F ?? ?? ??");
+    if (ApplyResolutionScanResult) {
+        spdlog::info("Apply Resolution: Address is {:s}+{:x}", sExeName.c_str(), ApplyResolutionScanResult - (std::uint8_t*)exeModule);
+        static SafetyHookMid ApplyResolutionMidHook{};
+        ApplyResolutionMidHook = safetyhook::create_mid(ApplyResolutionScanResult,
             [](SafetyHookContext& ctx) {
                 // Get window mode
                 if (ctx.rbx + 0xA0) {
@@ -232,7 +233,7 @@ void CurrentResolution()
             });
     }
     else {
-        spdlog::error("Current Resolution: Pattern scan failed.");
+        spdlog::error("Apply Resolution: Pattern scan failed.");
     }    
 }
 
@@ -368,7 +369,8 @@ void HUD()
                     [](SafetyHookContext& ctx) {
                         if (ctx.xmm0.f32[0] == 0.00f && ctx.xmm0.f32[1] == 0.00f && ctx.xmm0.f32[2] == 1.00f && ctx.xmm0.f32[3] == 1.00f) {
                             SDK::UObject* obj = (SDK::UObject*)ctx.rcx; 
-                            // Don't center these markers
+
+                            // Don't center these
                             if (obj->GetName().contains("WBP_3DWidgetRootPanelWidget_C") || obj->GetName().contains("WBP_UMG_Root_Widget_modern_C"))
                                 return;
 
@@ -420,7 +422,7 @@ void HUD()
                         panel->SetClipping(SDK::EWidgetClipping::Inherit);
                     }
 
-                    // Set FadeWidget scale
+                    // Set FadeWidget scale and clipping
                     if (FadeWidget) {
                         FadeWidget->CanvasPanel->SetClipping(SDK::EWidgetClipping::Inherit);
                         auto fadeslot = (SDK::UCanvasPanelSlot*)FadeWidget->Fade->Slot;
@@ -439,18 +441,18 @@ void HUD()
         }
 
         // Loading screen background
-        std::uint8_t* LoadingScreenScanResult = Memory::PatternScan(exeModule, "F3 41 ?? ?? ?? ?? ?? ?? 00 F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? 3D 55 05 00 00 75 ??");
-        if (LoadingScreenScanResult) {
-            spdlog::info("Loading Screen: Address is {:s}+{:x}", sExeName.c_str(), LoadingScreenScanResult - (std::uint8_t*)exeModule);
-            static SafetyHookMid LoadingScreenMidHook{};
-            LoadingScreenMidHook = safetyhook::create_mid(LoadingScreenScanResult + 0x9,
+        std::uint8_t* LoadingScreenBGScanResult = Memory::PatternScan(exeModule, "F3 41 ?? ?? ?? ?? ?? ?? 00 F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? F3 0F ?? ?? ?? F3 0F ?? ?? ?? 3D 55 05 00 00 75 ??");
+        if (LoadingScreenBGScanResult) {
+            spdlog::info("Loading Screen BG: Address is {:s}+{:x}", sExeName.c_str(), LoadingScreenBGScanResult - (std::uint8_t*)exeModule);
+            static SafetyHookMid LoadingScreenBGMidHook{};
+            LoadingScreenBGMidHook = safetyhook::create_mid(LoadingScreenBGScanResult + 0x9,
                 [](SafetyHookContext& ctx) {
                     ctx.xmm1.f32[0] = (float)iCurrentResX;
                     ctx.xmm2.f32[0] = (float)iCurrentResY;
                 });
         }
         else {
-            spdlog::error("Loading Screen: Pattern scan failed.");
+            spdlog::error("Loading Screen BG: Pattern scan failed.");
         }
     }
 }
