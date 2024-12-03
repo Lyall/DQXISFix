@@ -397,41 +397,31 @@ void HUD()
             static SafetyHookMid CameraFadeMidHook{};
             CameraFadeMidHook = safetyhook::create_mid(CameraFadeScanResult,
                 [](SafetyHookContext& ctx) {
-                    // This is performance intensive so lets cache ModernHUD and FadeWidget
-                    if (!ModernHUD || !FadeWidget) {
-                        for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
-                            SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
+                    for (int i = 0; i < SDK::UObject::GObjects->Num(); i++) {
+                        SDK::UObject* Obj = SDK::UObject::GObjects->GetByIndex(i);
 
-                            if (!Obj || Obj->IsDefaultObject())
-                                continue;
+                        if (!Obj)
+                            continue;
 
-                            if (!ModernHUD && Obj->IsA(SDK::UWBP_UMG_Root_Widget_modern_C::StaticClass()))
-                                ModernHUD = (SDK::UWBP_UMG_Root_Widget_modern_C*)Obj;
+                        if (Obj->IsDefaultObject())
+                            continue;
 
-                            if (!FadeWidget && Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass()))
-                                FadeWidget = (SDK::UWBP_UMG_Fade_Widget_000_C*)Obj;
-
-                            if (ModernHUD && FadeWidget)
-                                break;
+                        if (Obj->IsA(SDK::UWBP_UMG_Root_Widget_modern_C::StaticClass())) {
+                            auto hud = (SDK::UWBP_UMG_Root_Widget_modern_C*)Obj;
+                            auto panel = (SDK::UCanvasPanel*)hud->RootPanel;
+                            panel->SetClipping(SDK::EWidgetClipping::Inherit);
                         }
-                    }
 
-                    // Check if ModernHUD's clipping has been set
-                    if (ModernHUD && ModernHUD->Clipping != SDK::EWidgetClipping::Inherit) {
-                        auto panel = (SDK::UCanvasPanel*)ModernHUD->RootPanel;
-                        panel->SetClipping(SDK::EWidgetClipping::Inherit);
-                    }
+                        if (Obj->IsA(SDK::UWBP_UMG_Fade_Widget_000_C::StaticClass())) {
+                            FadeWidget = (SDK::UWBP_UMG_Fade_Widget_000_C*)Obj;
+                            FadeWidget->CanvasPanel->SetClipping(SDK::EWidgetClipping::Inherit);
 
-                    // Set FadeWidget scale and clipping
-                    if (FadeWidget) {
-                        FadeWidget->CanvasPanel->SetClipping(SDK::EWidgetClipping::Inherit);
-                        auto fadeslot = (SDK::UCanvasPanelSlot*)FadeWidget->Fade->Slot;
-
-                        if (fAspectRatio > fNativeAspect) {
-                            FadeWidget->SetRenderScale(SDK::FVector2D(fAspectMultiplier, 1.00f));
-                        }
-                        else if (fAspectRatio < fNativeAspect) {
-                            FadeWidget->SetRenderScale(SDK::FVector2D(1.00f, 1.00f / fAspectMultiplier));
+                            if (fAspectRatio > fNativeAspect) {
+                                FadeWidget->SetRenderScale(SDK::FVector2D(fAspectMultiplier, 1.00f));
+                            }
+                            else if (fAspectRatio < fNativeAspect) {
+                                FadeWidget->SetRenderScale(SDK::FVector2D(1.00f, 1.00f / fAspectMultiplier));
+                            }
                         }
                     }
                 });
