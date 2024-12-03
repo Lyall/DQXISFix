@@ -2,15 +2,14 @@
 [![Patreon-Button](https://raw.githubusercontent.com/Lyall/DQXISFix/refs/heads/master/.github/Patreon-Button.png)](https://www.patreon.com/Wintermance) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9)<br />
 [![Github All Releases](https://img.shields.io/github/downloads/Lyall/DQXISFix/total.svg)](https://github.com/Lyall/DQXISFix/releases)
 
-This is a fix that adds custom resolutions, ultrawide support and more to Dragon Quest XI S: Echoes of an Elusive Age.<br />
+This is a fix that adds ultrawide/narrower support and more to Dragon Quest XI S: Echoes of an Elusive Age.<br />
 
 If you are interested in a technical breakdown of how I made this fix, [check it out on my Patreon.](https://www.patreon.com/posts/dragon-quest-xi-102796530?utm_medium=clipboard_copy&utm_source=copyLink&utm_campaign=postshare_creator&utm_content=join_link)
 
 ## Features
-- Custom resolution support.
 - Ultrawide/narrow aspect ratio support.
 - Correct FOV at any aspect ratio.
-- Option to increase gameplay FOV.
+- Adjustable gameplay FOV.
 - Centred 16:9 HUD.
 
 ## Installation
