@@ -42,4 +42,5 @@ Thanks to Audioboxer on the WSGF Discord for testing! <br />
 [Ultimate ASI Loader](https://github.com/ThirteenAG/Ultimate-ASI-Loader) for ASI loading. <br />
 [inipp](https://github.com/mcmtroffaes/inipp) for ini reading. <br />
 [spdlog](https://github.com/gabime/spdlog) for logging. <br />
-[safetyhook](https://github.com/cursey/safetyhook) for hooking.
+[safetyhook](https://github.com/cursey/safetyhook) for hooking.<br />
+[Dumper-7](https://github.com/Encryqed/Dumper-7) for dumping the SDK.
