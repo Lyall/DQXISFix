@@ -43,9 +43,6 @@ float fHUDHeight;
 float fHUDHeightOffset;
 
 // Ini variables
-bool bCustomRes = true;
-int iCustomResX = 0;
-int iCustomResY = 0;
 bool bFixAspect = true;
 float fGameplayFOVMulti = 1.00f;
 bool bFixHUD = true;
@@ -124,18 +121,12 @@ void Configuration()
     spdlog::info("----------");
 
     // Load settings from ini
-    inipp::get_value(ini.sections["Custom Resolution"], "Enabled", bCustomRes);
-    inipp::get_value(ini.sections["Custom Resolution"], "Width", iCustomResX);
-    inipp::get_value(ini.sections["Custom Resolution"], "Height", iCustomResY);
     inipp::get_value(ini.sections["Gameplay FOV"], "Multiplier", fGameplayFOVMulti);
     fGameplayFOVMulti = std::clamp(fGameplayFOVMulti, 0.10f, 2.00f);
     inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bFixAspect);
     inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
 
     // Log ini parse
-    spdlog_confparse(bCustomRes);
-    spdlog_confparse(iCustomResX);
-    spdlog_confparse(iCustomResY);
     spdlog_confparse(fGameplayFOVMulti);
     spdlog_confparse(bFixAspect);
     spdlog_confparse(bFixHUD);
@@ -192,39 +183,39 @@ void CurrentResolution()
     iCurrentResY = DesktopDimensions.second;
     CalculateAspectRatio(true);
 
-    // Current Resolution
-    std::uint8_t* ApplyResolutionScanResult = Memory::PatternScan(exeModule, "44 ?? ?? ?? ?? 48 ?? ?? 44 ?? ?? ?? ?? 48 ?? ?? ?? ?? E8 ?? ?? ?? ?? F3 0F ?? ?? ??");
-    if (ApplyResolutionScanResult) {
-        spdlog::info("Apply Resolution: Address is {:s}+{:x}", sExeName.c_str(), ApplyResolutionScanResult - (std::uint8_t*)exeModule);
-        static SafetyHookMid ApplyResolutionMidHook{};
-        ApplyResolutionMidHook = safetyhook::create_mid(ApplyResolutionScanResult,
+    // Current resolution
+    std::uint8_t* CurrentResolutionScanResult = Memory::PatternScan(exeModule, "39 ?? ?? ?? ?? ?? 75 ?? 48 ?? ?? 48 ?? ?? ?? 39 ?? ?? ?? ?? ?? 74 ??");
+    if (CurrentResolutionScanResult) {
+        spdlog::info("Current Resolution: Address is {:s}+{:x}", sExeName.c_str(), CurrentResolutionScanResult - (std::uint8_t*)exeModule);
+        static SafetyHookMid CurrentResolutionMidHook{};
+        CurrentResolutionMidHook = safetyhook::create_mid(CurrentResolutionScanResult,
             [](SafetyHookContext& ctx) {
-                // Get window mode
-                if (ctx.rbx + 0xA0) {
-                    iFullscreenMode = *reinterpret_cast<int*>(ctx.rbx + 0xA0);
+                // Get GameUserSettings
+                SDK::UGameUserSettings* gus = SDK::UJackGameUserSettings::GetGameUserSettings();
+                if (gus) {
+                    iFullscreenMode = gus->FullscreenMode;
+                    spdlog::info("Current Resolution: FullscreenMode: {}", gus->FullscreenMode);
+                }
+                else {
+                    spdlog::error("Current Resolution: Failed to retrieve GameUserSettings.");
                 }
 
-                // Apply custom resolution
-                if (bCustomRes) {
-                    // Automatically use desktop resolution
-                    if (iCustomResX == 0 || iCustomResY == 0) {
-                        iCustomResX = DesktopDimensions.first;
-                        iCustomResY = DesktopDimensions.second;
-                    }
-
-                    ctx.r9 = iCustomResX;
-                    ctx.r10 = iCustomResY;
+                // Set full-screen to desktop resolution
+                if (gus && iFullscreenMode == 0) {
+                    ctx.rdx = (static_cast<uintptr_t>(DesktopDimensions.second) << 32) | DesktopDimensions.first;
                 }
 
-                // Set desktop resolution if using borderless mode
-                if (iFullscreenMode == 1) {
-                    ctx.r9 = DesktopDimensions.first;
-                    ctx.r10 = DesktopDimensions.second;
+                // Read resolution
+                int iResX = (int)ctx.rdx & 0xFFFFFFFF;
+                int iResY = (int)static_cast<uint32_t>(ctx.rdx >> 32);
+
+                // Report desktop resolution if running in borderless
+                if (gus && iFullscreenMode == 1) {
+                    iResX = DesktopDimensions.first;
+                    iResY = DesktopDimensions.second;
                 }
 
-                int iResX = (int)ctx.r9;
-                int iResY = (int)ctx.r10;
-
+                // Log resolution
                 if (iResX != iCurrentResX || iResY != iCurrentResY) {
                     iCurrentResX = iResX;
                     iCurrentResY = iResY;
@@ -233,8 +224,8 @@ void CurrentResolution()
             });
     }
     else {
-        spdlog::error("Apply Resolution: Pattern scan failed.");
-    }    
+        spdlog::error("Current Resolution: Pattern scan failed.");
+    }
 }
 
 void UpdateOffsets()
@@ -352,6 +343,64 @@ void AspectRatioFOV()
     else {
         spdlog::error("Gameplay FOV: Pattern scan failed.");
     }
+
+    /*
+      // 2D Aspect Ratio
+      std::uint8_t* TripleAspectRatioScanResult = Memory::PatternScan(exeModule, "89 ?? ?? 8B ?? ?? ?? ?? ?? 8B ?? ?? 83 ?? 02 83 ?? 04");
+      if (TripleAspectRatioScanResult) {
+          spdlog::info("2D Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), TripleAspectRatioScanResult - (std::uint8_t*)exeModule);
+          static SafetyHookMid TripleAspectRatioMidHook{};
+          TripleAspectRatioMidHook = safetyhook::create_mid(TripleAspectRatioScanResult,
+              [](SafetyHookContext& ctx) {
+                  ctx.rax = *(uint32_t*)(&fAspectRatio);
+              });
+      }
+      else {
+          spdlog::error("2D Aspect Ratio: Pattern scan failed.");
+      }
+
+      // 2D Canvas
+      std::uint8_t* TripleCanvasScanResult = Memory::PatternScan(exeModule, "41 ?? 00 05 00 00 48 ?? ?? 48 ?? ?? E8 ?? ?? ?? ??");
+      if (TripleCanvasScanResult) {
+          spdlog::info("2D Canvas: Address is {:s}+{:x}", sExeName.c_str(), TripleCanvasScanResult - (std::uint8_t*)exeModule);
+          static SafetyHookMid TripleCanvasMidHook{};
+          TripleCanvasMidHook = safetyhook::create_mid(TripleCanvasScanResult + 0x6,
+              [](SafetyHookContext& ctx) {
+                  if (fAspectRatio > fNativeAspect) {
+                      ctx.r8 = (int)720.00f * fAspectRatio;
+                      ctx.r9 = (int)720.00f;
+                  }
+                  else if (fAspectRatio < fNativeAspect) {
+                      ctx.r8 = (int)1280.00f;
+                      ctx.r9 = (int)1280.00f / fAspectRatio;
+                  }
+              });
+      }
+      else {
+          spdlog::error("2D Canvas: Pattern scan failed.");
+      }
+
+      // 2D World
+      std::uint8_t* TripleWorldScanResult = Memory::PatternScan(exeModule, "B9 00 05 00 00 0F ?? ?? ?? ?? ?? ?? 0F ?? ??");
+      if (TripleWorldScanResult) {
+          spdlog::info("2D World: Address is {:s}+{:x}", sExeName.c_str(), TripleWorldScanResult - (std::uint8_t*)exeModule);
+          static SafetyHookMid TripleWorldMidHook{};
+          TripleWorldMidHook = safetyhook::create_mid(TripleWorldScanResult + 0x5,
+              [](SafetyHookContext& ctx) {
+                  if (fAspectRatio > fNativeAspect) {
+                      ctx.rcx = (int)720.00f * fAspectRatio;
+                      ctx.rdx = (int)720.00f;
+                  }
+                  else if (fAspectRatio < fNativeAspect) {
+                      ctx.rcx = (int)1280.00f;
+                      ctx.rdx = (int)1280.00f / fAspectRatio;
+                  }
+              });
+      }
+      else {
+          spdlog::error("2D World: Pattern scan failed.");
+      }
+      */
 }
 
 void HUD()
