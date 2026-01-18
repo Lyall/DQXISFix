@@ -1,3 +1,7 @@
+## ⚠️ This repository has been migrated
+Active development has moved to [Codeberg](https://codeberg.org/Lyall/DQXISFix).  
+This repo is archived and will no longer receive updates.
+
 # Dragon Quest XI S: Echoes of an Elusive Age Fix
 [![Patreon-Button](https://raw.githubusercontent.com/Lyall/DQXISFix/refs/heads/master/.github/Patreon-Button.png)](https://www.patreon.com/Wintermance) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9)<br />
 [![Github All Releases](https://img.shields.io/github/downloads/Lyall/DQXISFix/total.svg)](https://github.com/Lyall/DQXISFix/releases)
